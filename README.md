@@ -1,24 +1,22 @@
-## Hoja de Trabajo 2 - Inteligencia Artificial (CC3085)
+## Laboratorio #5 - Inteligencia Artificial (CC3085)
 
 ### Equipo
-- **Daniel Chet** - 231177
 - **Dulce Ambrosio** - 231143
+- **Daniel Chet** - 231177
 - **Gadiel Ocaña** - 231270
 
 ### Descripción
-En el Task 2 se modeló el entorno Frozen Lake como un MDP estocástico, definiendo estados, acciones, función de transición con deslizamiento (1/3 de probabilidad por dirección) y función de recompensa, utilizando un factor de descuento y = 0.9.
-
-Se implementó el algoritmo de Value Iteration para calcular el valor óptimo V*(s) y posteriormente extraer la política óptima 𝜋*(s). El mapa de calor resultante muestra que los estados más cercanos al Goal son los más valiosos, mientras que los estados Hole tienen valor cero, confirmando el correcto funcionamiento del modelo y del algoritmo.
+Se implementó el algoritmo de Q-Learning sobre el entorno `FrozenLake-v1` de Gymnasium, modelado como un Proceso de Decisión de Markov (MDP) estocástico. El agente aprende una política óptima interactuando con el entorno durante 10,000 episodios, utilizando una estrategia Epsilon-Greedy para balancear exploración y explotación.
 
 ### Contenido
 
-- **`Hoja2.ipynb`** — Notebook principal con la implementación completa.
+- **`Lab5.ipynb`** — Notebook principal con la implementación completa.
 
 ---
 
-### Task 2.1 — Modelado del MDP
+### Task 2.1 — Preparación del entorno
 
-Se implementó la clase `FrozenLakeMDP` que representa el entorno Frozen Lake en una cuadrícula 4×4:
+Se utilizó la biblioteca `gymnasium` para crear el entorno `FrozenLake-v1` en una cuadrícula 4×4 con hielo resbaladizo (`is_slippery=True`), lo que lo convierte en un entorno estocástico.
 
 ```
 S  F  F  F
@@ -32,28 +30,42 @@ H  F  F  G
 | Componente | Descripción |
 |---|---|
 | **Estados** | 16 estados (0–15), numerados fila por fila |
-| **Acciones** | 4 acciones: Norte (↑), Sur (↓), Este (→), Oeste (←) |
-| **Transiciones** | Estocásticas: 1/3 de probabilidad para la acción elegida y cada perpendicular |
+| **Acciones** | 4 acciones: Izquierda (0), Abajo (1), Derecha (2), Arriba (3) |
 | **Recompensa** | +1.0 al llegar al Goal (G), 0.0 en cualquier otro caso |
-| **Factor de descuento** | γ = 0.9 |
-| **Estados terminales** | Holes (H) y Goal (G) — desde estos no hay transiciones |
-
-La función `get_transitions(state, action)` retorna la lista de `(probabilidad, siguiente_estado)` teniendo en cuenta el deslizamiento del hielo: si la acción elegida es Norte/Sur, las perpendiculares son Este/Oeste, y viceversa.
+| **Estocástico** | `is_slippery=True` — el agente puede deslizarse en direcciones no deseadas |
 
 ---
 
-### Task 2.2 — Algoritmo de Iteración de Valores (Value Iteration)
+### Task 2.2 — Implementación de Q-Learning
 
-Se implementó Value Iteration partiendo de V₀(s) = 0 para todos los estados, iterando hasta convergencia con ε = 1×10⁻⁶:
+Se inicializó la Q-table con ceros y se entrenó el agente con los siguientes hiperparámetros:
 
-$$V^*(s) = \max_a \sum_{s'} P(s' \mid s, a)\left[R(s, a, s') + \gamma V^*(s')\right]$$
+| Hiperparámetro | Valor | Descripción |
+|---|---|---|
+| `alpha` | 0.1 | Learning rate — cuánto confiar en la nueva información |
+| `gamma` | 0.99 | Factor de descuento — qué tanto se valoran las recompensas futuras |
+| `epsilon` | 1.0 → 0.01 | Control de exploración vs. explotación (decae con `epsilon_decay = 0.999`) |
+| `episodes` | 10,000 | Número de episodios de entrenamiento |
 
-Una vez obtenidos los valores óptimos, se extrae la política óptima π*(s) seleccionando la acción de mayor valor esperado para cada estado:
+La actualización de la Q-table sigue la fórmula de Q-Learning:
 
-$$\pi^*(s) = \arg\max_a \sum_{s'} P(s' \mid s, a)\left[R(s, a, s') + \gamma V^*(s')\right]$$
+$$Q(s, a) \leftarrow Q(s, a) + \alpha \left[ r + \gamma \max_{a'} Q(s', a') - Q(s, a) \right]$$
 
-**Resultados:**
+La estrategia **Epsilon-Greedy** selecciona una acción aleatoria con probabilidad ε (exploración) o la acción de mayor valor en la Q-table con probabilidad 1−ε (explotación).
 
-- La política óptima se visualiza como una cuadrícula 4×4 con las flechas de dirección (↑ ↓ → ←) y las etiquetas H/G en los estados terminales.
-- El mapa de calor de V*(s) muestra que los estados más cercanos al Goal acumulan los valores más altos, mientras que los Holes y los estados alejados tienen valores cercanos a cero.
+---
+
+### Visualización de la política
+
+Una vez entrenado el agente, se extrae la política óptima derivada de la Q-table seleccionando la acción de mayor valor en cada estado:
+
+$$\pi^*(s) = \arg\max_a Q(s, a)$$
+
+La política se muestra como una cuadrícula 4×4 con símbolos de dirección (← ↓ → ↑).
+
+---
+
+### Mapa de calor de la Q-table
+
+Se visualiza el valor máximo aprendido por estado (`max Q(s, a)`) como un mapa de calor 4×4, donde los estados más cercanos al Goal presentan los valores más altos, mientras que los Holes y estados alejados tienen valores cercanos a cero.
 
