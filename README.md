@@ -1,4 +1,4 @@
-## Laboratorio #6 - Inteligencia Artificial (CC3085)
+## Laboratorio #7 - Inteligencia Artificial (CC3085)
 
 ### Equipo
 - **Dulce Ambrosio** - 231143
@@ -6,15 +6,22 @@
 - **Gadiel Ocaña** - 231270
 
 ### Descripción
-Se implementó el juego **Connect Four (Conecta 4)** y un agente basado en **búsqueda adversaria** usando **Minimax** y **Poda Alfa‑Beta**. El agente evalúa estados no terminales con una heurística `evaluate(board)` (ventanas de 4 y preferencia por el centro) y selecciona movimientos óptimos aproximados con profundidad limitada.
+Se utiliza **Connect Four (Conecta 4)** como entorno y se integran dos enfoques de IA:
+
+- **Búsqueda adversaria**: **Minimax** y **poda Alfa‑Beta**, con heurística `evaluate(board, piece)` (ventanas de 4 + preferencia por el centro).
+- **Aprendizaje por refuerzo (TD Learning)**: agente **Q-Learning** (ε-greedy) entrenado contra un oponente aleatorio.
+
+Además, se ejecuta una **competencia** entre agentes (TD vs Minimax, TD vs Alfa‑Beta, Minimax vs Alfa‑Beta), se muestran **partidas representativas** de forma visual y se genera una **gráfica** de resultados.
 
 ### Contenido
 
-- **`Lab6.ipynb`** — Notebook principal con la implementación completa.
+- **`Lab7.ipynb`** — Notebook principal con la implementación completa (Connect Four + Minimax/Alfa‑Beta + Q‑Learning + competencia + gráfica).
 
 ---
 
-### Task 2.1 — Diseño del juego (Connect Four)
+## Parte A — Base del juego (Connect Four) + búsqueda adversaria
+
+### Task 2.1 (Lab6) — Diseño del juego (Connect Four)
 
 Se modela el juego Conecta 4 en un tablero de **6×7** usando una matriz (`numpy`) con las siguientes constantes:
 
@@ -40,7 +47,7 @@ La condición de victoria se detecta con `winning_move(board, piece)` revisando 
 
 ---
 
-### Task 2.2 — Minimax y Poda Alfa‑Beta
+### Task 2.2 (Lab6) — Minimax y Poda Alfa‑Beta
 
 Se implementan dos versiones para comparar:
 
@@ -59,7 +66,7 @@ Cuando se llega a profundidad 0 o a un estado terminal, el algoritmo retorna una
 
 ---
 
-### Task 2.3 — Heurística `evaluate(board)`
+### Task 2.3 (Lab6) — Heurística `evaluate(board, piece)`
 
 Para estados no terminales, se define `evaluate(board, piece)` basada en:
 
@@ -77,13 +84,57 @@ Esta heurística guía la búsqueda con profundidad limitada para escoger una bu
 
 ---
 
+## Parte B — Aprendizaje por refuerzo (TD Learning / Q-Learning)
+
+### Task 2.1 (Lab7) — Agente TD Learning (Q-Learning)
+
+Se implementa un agente **Q-Learning** tabular (diccionario) para aprender una política en Conecta 4.
+
+- **Estado**: `get_state(board)` aplana el tablero y lo convierte a `tuple(board.flatten())` para poder usarlo como llave.
+- **Acción**: elegir una columna válida (mismo `get_valid_moves(board)`).
+- **Selección de acción**: ε-greedy (`choose_action`).
+- **Actualización**:
+	- `Q(s,a) ← Q(s,a) + α [ r + γ max_a' Q(s',a') − Q(s,a) ]`
+- **Recompensa** (`get_reward`) (resumen):
+	- Victoria: +100
+	- Derrota: −100
+	- Empate: +10
+	- Paso no terminal: penalización pequeña (−0.1) y bono si juega al centro.
+
+El entrenamiento `train(episodes)` enfrenta al agente (pieza 1) contra un oponente aleatorio (pieza 2) y decae `epsilon` hasta `epsilon_min`.
+
+---
+
+### Task 2.2 (Lab7) — Competencia entre agentes
+
+Se corren partidas automáticas (`play_match`) bajo tres condiciones (por defecto 50 partidas cada una):
+
+- **Condición A**: TD Learning vs Minimax (sin poda)
+- **Condición B**: TD Learning vs Minimax + Alfa‑Beta
+- **Condición C (control)**: Minimax vs Minimax + Alfa‑Beta
+
+Al final, se grafica la distribución de victorias/empates y se guarda un PDF: **`resultados_lab7.pdf`**.
+
+---
+
+### Task 2.3 (Lab7) — Partidas representativas (para video)
+
+Se incluye una versión visual (`play_visual_match`) que imprime el tablero en cada turno con un `delay`, para grabar una partida representativa por condición:
+
+- TD Learning vs Minimax
+- TD Learning vs Alfa‑Beta
+- Minimax vs Alfa‑Beta
+
+---
+
 ### Ejecución (Notebook)
 
-En `Lab6.ipynb`:
+En `Lab7.ipynb`:
 
-1. Ejecutar las celdas en orden (define tablero, Minimax/Alfa‑Beta y heurística).
-2. Se incluye una prueba que imprime nodos visitados por Minimax y por Alfa‑Beta.
-3. Al final hay dos partidas:
-	- **IA vs Agente Aleatorio** (`play_game(vs_random=True)`)
-	- **IA vs Humano** (`play_game(vs_random=False)`), que solicita entradas por consola dentro del notebook.
+1. Ejecutar celdas en orden para definir el juego, Minimax/Alfa‑Beta y la heurística.
+2. (Opcional) Ejecutar la celda de prueba de **nodos visitados** para comparar Minimax vs Alfa‑Beta.
+3. Ejecutar el entrenamiento del agente TD (`train(100000)`).
+   - Nota: 100,000 episodios puede tardar; se puede reducir para pruebas rápidas.
+4. Ejecutar la **competencia** (condiciones A/B/C) y luego la celda de **gráfica** (genera `resultados_lab7.pdf`).
+5. (Opcional) Ejecutar las **partidas representativas** con impresión visual para grabación.
 
