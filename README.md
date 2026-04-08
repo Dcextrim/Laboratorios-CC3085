@@ -1,140 +1,93 @@
-## Laboratorio #7 - Inteligencia Artificial (CC3085)
+## Laboratorio #8 - Inteligencia Artificial (CC3085)
 
-### Equipo
+### Integrantes
 - **Dulce Ambrosio** - 231143
 - **Daniel Chet** - 231177
 - **Gadiel Ocaña** - 231270
 
 ### Descripción
-Se utiliza **Connect Four (Conecta 4)** como entorno y se integran dos enfoques de IA:
+Este laboratorio modela un problema como **CSP (Constraint Satisfaction Problem)**: asignar **8 máquinas** (`M1..M8`) a **3 servidores** (`S1..S3`) cumpliendo restricciones.
 
-- **Búsqueda adversaria**: **Minimax** y **poda Alfa‑Beta**, con heurística `evaluate(board, piece)` (ventanas de 4 + preferencia por el centro).
-- **Aprendizaje por refuerzo (TD Learning)**: agente **Q-Learning** (ε-greedy) entrenado contra un oponente aleatorio.
+Se implementan y comparan tres enfoques de búsqueda:
 
-Además, se ejecuta una **competencia** entre agentes (TD vs Minimax, TD vs Alfa‑Beta, Minimax vs Alfa‑Beta), se muestran **partidas representativas** de forma visual y se genera una **gráfica** de resultados.
+- **Búsqueda exacta**: **Backtracking Search** (DFS) con validación de restricciones y **forward checking** (lookahead).
+- **Búsqueda aproximada**: **Beam Search** con una función heurística de “peso” basada en el número de violaciones.
+- **Búsqueda local**: **ICM (Iterated Conditional Modes)**, iniciando desde una asignación aleatoria y mejorando iterativamente.
+
+Finalmente, se realiza un **benchmarking** simple midiendo tiempos y verificando validez de las soluciones.
 
 ### Contenido
-
-- **`Lab7.ipynb`** — Notebook principal con la implementación completa (Connect Four + Minimax/Alfa‑Beta + Q‑Learning + competencia + gráfica).
-
----
-
-## Parte A — Base del juego (Connect Four) + búsqueda adversaria
-
-### Task 2.1 (Lab6) — Diseño del juego (Connect Four)
-
-Se modela el juego Conecta 4 en un tablero de **6×7** usando una matriz (`numpy`) con las siguientes constantes:
-
-- `EMPTY = 0`
-- `PLAYER = 1` (agente aleatorio o humano)
-- `AI = 2` (agente que usa Alfa‑Beta)
-
-**Representación y dinámica (MDP/juego adversario):**
-
-| Componente | Descripción |
-|---|---|
-| **Estados** | Configuraciones del tablero `board` de tamaño 6×7 |
-| **Acciones** | Elegir una columna válida `col ∈ {0..6}` donde la casilla superior esté vacía |
-| **Transición** | `drop_piece(board, col, piece)` coloca la ficha en la fila disponible más baja |
-| **Terminal** | `is_terminal(board)` cuando hay 4 en línea (jugador o IA) o no hay movimientos |
-| **Recompensa** | Implícita vía función de utilidad: victoria/derrota/empate; no terminal via heurística |
-
-La condición de victoria se detecta con `winning_move(board, piece)` revisando patrones:
-
-- Horizontal
-- Vertical
-- Diagonales positiva y negativa
+- **`Lab8.ipynb`** — Notebook principal con la implementación completa (CSP + Backtracking + Beam Search + Local Search/ICM + benchmarking).
 
 ---
 
-### Task 2.2 (Lab6) — Minimax y Poda Alfa‑Beta
+## Parte A — Definición del CSP
 
-Se implementan dos versiones para comparar:
+El problema se representa con:
 
-- `minimax(board, depth, maximizing)`: Minimax clásico sin poda.
-- `alphabeta(board, depth, alpha, beta, maximizing)`: Minimax optimizado con **poda Alfa‑Beta**.
+- **Variables**: máquinas `M1..M8`.
+- **Dominios**: servidores posibles `S1`, `S2`, `S3` para cada máquina.
+- **Restricciones**:
+  - **Capacidad**: cada servidor puede alojar **máximo 3 máquinas**.
+  - **Anti-afinidad**: ciertos pares no pueden quedar en el mismo servidor:
+    - (`M1`, `M2`), (`M3`, `M4`), (`M5`, `M6`), (`M1`, `M5`).
 
-Se contabiliza el número de nodos visitados (`nodes_minimax`, `nodes_alphabeta`) para evidenciar la reducción lograda por la poda.
-
-**Idea clave de Alfa‑Beta:**
-
-- `alpha`: mejor valor garantizado para MAX.
-- `beta`: mejor valor garantizado para MIN.
-- Si `alpha >= beta`, la rama se puede podar.
-
-Cuando se llega a profundidad 0 o a un estado terminal, el algoritmo retorna una utilidad alta (victoria), baja (derrota), 0 (empate) o una estimación heurística del tablero.
+La consistencia de una asignación parcial se valida con `is_valid(assignment, var, value)`.
 
 ---
 
-### Task 2.3 (Lab6) — Heurística `evaluate(board, piece)`
+## Parte B — Algoritmos
 
-Para estados no terminales, se define `evaluate(board, piece)` basada en:
+### Task 2.1 — Backtracking Search
 
-- **Preferencia por el centro:** se bonifican fichas en la columna central.
-- **Ventanas de 4:** se recorre el tablero (horizontal, vertical y diagonales) y se evalúa cada “window” con `evaluate_window(window, piece)`.
+Se implementa `backtracking(assignment, domains)` con el patrón:
 
-La ventana se puntúa (de forma resumida) así:
+1. Elegir la siguiente variable no asignada.
+2. Probar valores del dominio.
+3. Verificar restricciones (capacidad + anti-afinidad).
+4. Aplicar **forward checking** (`forward_check`) para podar dominios futuros.
+5. Recursión DFS y backtrack cuando no hay extensiones válidas.
 
-- 4 propias: +100
-- 3 propias + 1 vacía: +5
-- 2 propias + 2 vacías: +2
-- 3 del oponente + 1 vacía: −4
+Este enfoque es **exacto** (si existe solución, la encuentra), pero su costo puede crecer exponencialmente.
 
-Esta heurística guía la búsqueda con profundidad limitada para escoger una buena columna aun cuando no se alcance un estado terminal en el horizonte de búsqueda.
+### Task 2.2 — Beam Search
 
----
+Se implementa `beam_search(K)` manteniendo un conjunto (beam) de hasta `K` asignaciones parciales en cada paso:
 
-## Parte B — Aprendizaje por refuerzo (TD Learning / Q-Learning)
+- **EXTEND**: generar candidatos extendiendo las asignaciones actuales.
+- **PRUNE**: ordenar por `compute_weight` y quedarse con los mejores `K`.
 
-### Task 2.1 (Lab7) — Agente TD Learning (Q-Learning)
+La función `compute_weight(assignment)` penaliza violaciones a capacidad y anti-afinidad (menos violaciones → mayor peso).
 
-Se implementa un agente **Q-Learning** tabular (diccionario) para aprender una política en Conecta 4.
+### Task 2.3 — Local Search (ICM)
 
-- **Estado**: `get_state(board)` aplana el tablero y lo convierte a `tuple(board.flatten())` para poder usarlo como llave.
-- **Acción**: elegir una columna válida (mismo `get_valid_moves(board)`).
-- **Selección de acción**: ε-greedy (`choose_action`).
-- **Actualización**:
-	- `Q(s,a) ← Q(s,a) + α [ r + γ max_a' Q(s',a') − Q(s,a) ]`
-- **Recompensa** (`get_reward`) (resumen):
-	- Victoria: +100
-	- Derrota: −100
-	- Empate: +10
-	- Paso no terminal: penalización pequeña (−0.1) y bono si juega al centro.
+Se implementa `local_search_icm(max_iters)`:
 
-El entrenamiento `train(episodes)` enfrenta al agente (pieza 1) contra un oponente aleatorio (pieza 2) y decae `epsilon` hasta `epsilon_min`.
+- Inicia desde una asignación completa aleatoria (`random_assignment`).
+- Recorre variable por variable, eligiendo el valor del dominio que **maximiza** el peso (`compute_weight`).
+- Solo acepta cambios que mejoren la solución, por lo que converge (pero puede caer en óptimos locales).
 
 ---
 
-### Task 2.2 (Lab7) — Competencia entre agentes
+## Parte C — Benchmarking y conclusiones
 
-Se corren partidas automáticas (`play_match`) bajo tres condiciones (por defecto 50 partidas cada una):
+Se mide el tiempo de ejecución de:
 
-- **Condición A**: TD Learning vs Minimax (sin poda)
-- **Condición B**: TD Learning vs Minimax + Alfa‑Beta
-- **Condición C (control)**: Minimax vs Minimax + Alfa‑Beta
+- Backtracking
+- Beam Search (con `K=3`)
+- ICM (con un límite de iteraciones)
 
-Al final, se grafica la distribución de victorias/empates y se guarda un PDF: **`resultados_lab7.pdf`**.
-
----
-
-### Task 2.3 (Lab7) — Partidas representativas (para video)
-
-Se incluye una versión visual (`play_visual_match`) que imprime el tablero en cada turno con un `delay`, para grabar una partida representativa por condición:
-
-- TD Learning vs Minimax
-- TD Learning vs Alfa‑Beta
-- Minimax vs Alfa‑Beta
+Además, se valida la solución final con `is_solution_valid(solution)` para comparar enfoques exactos vs aproximados.
 
 ---
 
-### Ejecución (Notebook)
+## Ejecución (Notebook)
 
-En `Lab7.ipynb`:
+En `Lab8.ipynb`:
 
-1. Ejecutar celdas en orden para definir el juego, Minimax/Alfa‑Beta y la heurística.
-2. (Opcional) Ejecutar la celda de prueba de **nodos visitados** para comparar Minimax vs Alfa‑Beta.
-3. Ejecutar el entrenamiento del agente TD (`train(100000)`).
-   - Nota: 100,000 episodios puede tardar; se puede reducir para pruebas rápidas.
-4. Ejecutar la **competencia** (condiciones A/B/C) y luego la celda de **gráfica** (genera `resultados_lab7.pdf`).
-5. (Opcional) Ejecutar las **partidas representativas** con impresión visual para grabación.
+1. Ejecutar celdas en orden (definición de CSP y restricciones).
+2. Ejecutar **Task 2.1** para obtener una solución por Backtracking.
+3. Ejecutar **Task 2.2** para obtener una solución por Beam Search.
+4. Ejecutar **Task 2.3** para obtener una solución por ICM.
+5. Ejecutar **Task 2.4** para correr el benchmarking (tiempos + validez + peso).
 
