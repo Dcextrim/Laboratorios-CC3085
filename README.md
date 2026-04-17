@@ -1,4 +1,4 @@
-## Laboratorio #8 - Inteligencia Artificial (CC3085)
+## Laboratorio #9 - Inteligencia Artificial (CC3085)
 
 ### Integrantes
 - **Dulce Ambrosio** - 231143
@@ -6,88 +6,67 @@
 - **Gadiel Ocaña** - 231270
 
 ### Descripción
-Este laboratorio modela un problema como **CSP (Constraint Satisfaction Problem)**: asignar **8 máquinas** (`M1..M8`) a **3 servidores** (`S1..S3`) cumpliendo restricciones.
+Este laboratorio implementa inferencia básica en una Red Bayesiana usando el ejemplo clásico de Alarma con variables binarias:
 
-Se implementan y comparan tres enfoques de búsqueda:
+- **B**: Robo
+- **E**: Terremoto
+- **A**: Alarma
 
-- **Búsqueda exacta**: **Backtracking Search** (DFS) con validación de restricciones y **forward checking** (lookahead).
-- **Búsqueda aproximada**: **Beam Search** con una función heurística de “peso” basada en el número de violaciones.
-- **Búsqueda local**: **ICM (Iterated Conditional Modes)**, iniciando desde una asignación aleatoria y mejorando iterativamente.
+Se define el modelo con priors raros usando ε = 0.01 para P(B=1) y P(E=1), y una CPT determinista para la alarma:
 
-Finalmente, se realiza un **benchmarking** simple midiendo tiempos y verificando validez de las soluciones.
+- A = B OR E
+
+Luego se construye la distribución conjunta, se calcula inferencia marginal/condicional por marginalización y se demuestra el efecto “Explain Away” comparando probabilidades posteriores.
 
 ### Contenido
-- **`Lab8.ipynb`** — Notebook principal con la implementación completa (CSP + Backtracking + Beam Search + Local Search/ICM + benchmarking).
+- **`Lab9.ipynb`** — Notebook principal con la implementación completa (distribución conjunta + inferencia marginal + explain away).
 
 ---
 
-## Parte A — Definición del CSP
+## Parte A — Modelo (Red Bayesiana)
 
-El problema se representa con:
-
-- **Variables**: máquinas `M1..M8`.
-- **Dominios**: servidores posibles `S1`, `S2`, `S3` para cada máquina.
-- **Restricciones**:
-  - **Capacidad**: cada servidor puede alojar **máximo 3 máquinas**.
-  - **Anti-afinidad**: ciertos pares no pueden quedar en el mismo servidor:
-    - (`M1`, `M2`), (`M3`, `M4`), (`M5`, `M6`), (`M1`, `M5`).
-
-La consistencia de una asignación parcial se valida con `is_valid(assignment, var, value)`.
+- **Estructura**: `B → A ← E` (V-structure)
+- **Factorización**: `P(B,E,A) = P(B) · P(E) · P(A|B,E)`
+- **Parámetro**: `ε = 0.01` (eventos raros para robo/terremoto)
 
 ---
 
-## Parte B — Algoritmos
+## Parte B — Implementación (Tasks)
 
-### Task 2.1 — Backtracking Search
+### Task 2.1 — Generador de distribución conjunta
 
-Se implementa `backtracking(assignment, domains)` con el patrón:
+Se definen las funciones locales del modelo y la conjunta:
 
-1. Elegir la siguiente variable no asignada.
-2. Probar valores del dominio.
-3. Verificar restricciones (capacidad + anti-afinidad).
-4. Aplicar **forward checking** (`forward_check`) para podar dominios futuros.
-5. Recursión DFS y backtrack cuando no hay extensiones válidas.
+- `p_b(b)` y `p_e(e)` para los priors
+- `p_a_dado_be(a, b, e)` para la CPT de `A|B,E`
+- `prob_conjunta(b, e, a)` para `P(B,E,A)`
 
-Este enfoque es **exacto** (si existe solución, la encuentra), pero su costo puede crecer exponencialmente.
+El notebook imprime la tabla completa de `P(B,E,A)` y verifica que la suma total sea `1.0`.
 
-### Task 2.2 — Beam Search
+### Task 2.2 — Inferencia marginal
 
-Se implementa `beam_search(K)` manteniendo un conjunto (beam) de hasta `K` asignaciones parciales en cada paso:
+Se implementa `inferencia_marginal(query, evidencia={})` para calcular:
 
-- **EXTEND**: generar candidatos extendiendo las asignaciones actuales.
-- **PRUNE**: ordenar por `compute_weight` y quedarse con los mejores `K`.
+- Marginales (ej. `P(A=1)`) sumando sobre variables ocultas
+- Condicionales usando `P(X|Y) = P(X,Y) / P(Y)` cuando hay evidencia
 
-La función `compute_weight(assignment)` penaliza violaciones a capacidad y anti-afinidad (menos violaciones → mayor peso).
+### Task 2.3 — Demostración del efecto “Explain Away”
 
-### Task 2.3 — Local Search (ICM)
+Se compara:
 
-Se implementa `local_search_icm(max_iters)`:
+- `P(B=1 | A=1)` (diagnóstico simple)
+- `P(B=1 | A=1, E=1)` (al conocer otra causa)
 
-- Inicia desde una asignación completa aleatoria (`random_assignment`).
-- Recorre variable por variable, eligiendo el valor del dominio que **maximiza** el peso (`compute_weight`).
-- Solo acepta cambios que mejoren la solución, por lo que converge (pero puede caer en óptimos locales).
-
----
-
-## Parte C — Benchmarking y conclusiones
-
-Se mide el tiempo de ejecución de:
-
-- Backtracking
-- Beam Search (con `K=3`)
-- ICM (con un límite de iteraciones)
-
-Además, se valida la solución final con `is_solution_valid(solution)` para comparar enfoques exactos vs aproximados.
+Mostrando que al observar `E=1`, la probabilidad posterior de `B=1` disminuye, porque `E` “explica” el efecto `A`.
 
 ---
 
 ## Ejecución (Notebook)
 
-En `Lab8.ipynb`:
+En `Lab9.ipynb`:
 
-1. Ejecutar celdas en orden (definición de CSP y restricciones).
-2. Ejecutar **Task 2.1** para obtener una solución por Backtracking.
-3. Ejecutar **Task 2.2** para obtener una solución por Beam Search.
-4. Ejecutar **Task 2.3** para obtener una solución por ICM.
-5. Ejecutar **Task 2.4** para correr el benchmarking (tiempos + validez + peso).
+1. Ejecutar las celdas en orden (parámetros y definición del modelo).
+2. Ejecutar **Task 2.1** para generar e imprimir `P(B,E,A)`.
+3. Ejecutar **Task 2.2** para calcular marginales/condicionales (incluye `P(A=1)`).
+4. Ejecutar **Task 2.3** para observar y verificar el efecto “Explain Away”.
 
