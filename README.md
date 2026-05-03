@@ -1,4 +1,4 @@
-## Laboratorio #9 - Inteligencia Artificial (CC3085)
+﻿## Laboratorio #10 - Inteligencia Artificial (CC3085)
 
 ### Integrantes
 - **Dulce Ambrosio** - 231143
@@ -6,67 +6,77 @@
 - **Gadiel Ocaña** - 231270
 
 ### Descripción
-Este laboratorio implementa inferencia básica en una Red Bayesiana usando el ejemplo clásico de Alarma con variables binarias:
+Este laboratorio trabaja con **Redes Bayesianas e inferencia aproximada mediante Filtrado de Partículas**, aplicado al sistema de seguimiento de vehículos **LogiTrack**: un patio de 20 carriles (0–19) con sensores RFID ruidosos.
 
-- **B**: Robo
-- **E**: Terremoto
-- **A**: Alarma
-
-Se define el modelo con priors raros usando ε = 0.01 para P(B=1) y P(E=1), y una CPT determinista para la alarma:
-
-- A = B OR E
-
-Luego se construye la distribución conjunta, se calcula inferencia marginal/condicional por marginalización y se demuestra el efecto “Explain Away” comparando probabilidades posteriores.
+El laboratorio cubre dos grandes tareas:
+- **Task 2**: Depuración de un filtro de partículas con un bug deliberado (remuestreo greedy en lugar de probabilístico).
+- **Task 3**: Implementación completa desde cero, análisis experimental, detección de colapso y dictamen ejecutivo.
 
 ### Contenido
-- **`Lab9.ipynb`** — Notebook principal con la implementación completa (distribución conjunta + inferencia marginal + explain away).
+- **`Lab10.ipynb`** — Notebook principal con la implementación completa.
 
 ---
 
-## Parte A — Modelo (Red Bayesiana)
+## Modelo del Sistema LogiTrack
 
-- **Estructura**: `B → A ← E` (V-structure)
-- **Factorización**: `P(B,E,A) = P(B) · P(E) · P(A|B,E)`
-- **Parámetro**: `ε = 0.01` (eventos raros para robo/terremoto)
-
----
-
-## Parte B — Implementación (Tasks)
-
-### Task 2.1 — Generador de distribución conjunta
-
-Se definen las funciones locales del modelo y la conjunta:
-
-- `p_b(b)` y `p_e(e)` para los priors
-- `p_a_dado_be(a, b, e)` para la CPT de `A|B,E`
-- `prob_conjunta(b, e, a)` para `P(B,E,A)`
-
-El notebook imprime la tabla completa de `P(B,E,A)` y verifica que la suma total sea `1.0`.
-
-### Task 2.2 — Inferencia marginal
-
-Se implementa `inferencia_marginal(query, evidencia={})` para calcular:
-
-- Marginales (ej. `P(A=1)`) sumando sobre variables ocultas
-- Condicionales usando `P(X|Y) = P(X,Y) / P(Y)` cuando hay evidencia
-
-### Task 2.3 — Demostración del efecto “Explain Away”
-
-Se compara:
-
-- `P(B=1 | A=1)` (diagnóstico simple)
-- `P(B=1 | A=1, E=1)` (al conocer otra causa)
-
-Mostrando que al observar `E=1`, la probabilidad posterior de `B=1` disminuye, porque `E` “explica” el efecto `A`.
+- **Dominio**: 20 carriles discretos (0–19)
+- **Dinámica de transición**: el vehículo se mueve ±1 carril o permanece en el mismo con probabilidad uniforme (1/3 cada opción); con reflexión en los bordes.
+- **Modelo de sensor (emisión)**:
+  - P(obs = h) = 0.6 (lectura correcta)
+  - P(obs = h ± 1) = 0.2 c/u (carril adyacente)
+  - Resto distribuido uniformemente entre los demás carriles
 
 ---
 
-## Ejecución (Notebook)
+## Task 2 — Depuración del sistema con bug deliberado
 
-En `Lab9.ipynb`:
+Se analiza una implementación buggy del filtro de partículas donde el paso de remuestreo usa `np.argsort` para seleccionar deterministamente las K partículas con mayor peso (**Beam Search**), en lugar de muestreo probabilístico proporcional al peso.
 
-1. Ejecutar las celdas en orden (parámetros y definición del modelo).
-2. Ejecutar **Task 2.1** para generar e imprimir `P(B,E,A)`.
-3. Ejecutar **Task 2.2** para calcular marginales/condicionales (incluye `P(A=1)`).
-4. Ejecutar **Task 2.3** para observar y verificar el efecto “Explain Away”.
+- **Bug**: `idx = np.argsort(pesos_norm)[-K:]` — selección greedy, no estocástica.
+- **Corrección**: `idx = np.random.choice(len(propuestas), size=K, replace=True, p=pesos_norm)` — remuestreo proporcional al peso.
+- Se demuestra con una secuencia crítica (`[16,16,16,16,16,3,3,3,3]`) que el bug falla al adaptarse a cambios bruscos, y se verifica el caso de pesos uniformes donde ambas versiones son equivalentes.
 
+---
+
+## Task 3 — Implementación y Análisis
+
+### Task 3.1 — Implementación base (K=5)
+
+Implementación desde cero sin librerías de inferencia probabilística:
+
+- `simular_vehiculo(pasos)`: genera trayectoria real oculta + observaciones ruidosas del sensor.
+- `filtro_particulas(observaciones, K)`: algoritmo completo con los 3 pasos (proponer → ponderar → remuestrear probabilísticamente).
+- `visualizar_simulacion(...)`: gráfica con trayectoria real, observaciones, estimación y nube de partículas.
+
+### Task 3.2 — Análisis experimental
+
+50 simulaciones independientes de 30 pasos cada una, comparando **K=5 vs K=20**:
+
+- Gráfica de error promedio por paso (los primeros pasos tienen mayor error por inicialización uniforme).
+- Identificación de las 5 peores simulaciones: el fallo se debe principalmente a la **cantidad insuficiente de partículas** (K=5), que provoca colapso cuando ninguna partícula queda cerca de la posición real.
+- Tabla comparativa: K=20 reduce el error promedio en ~86% respecto a K=5.
+
+### Task 3.3 — Detección de colapso
+
+- **Métrica de diversidad**: varianza σ² de las partículas. Umbral: σ² < 2.0 (6% de la varianza uniforme teórica ≈ 33.25).
+- `alerta_colapso(particulas, umbral)`: retorna flag de colapso + valor de σ².
+- Tres escenarios demostrativos:
+  1. **Sin colapso** — K=20, trayectoria gradual.
+  2. **Colapso recuperable** — K=5, sensor erróneo durante 3 pasos; el filtro se recupera por la dispersión natural de la dinámica.
+  3. **Colapso irrecuperable** — K=5, sensor sistemáticamente en zona opuesta; todas las partículas convergen a la región incorrecta de forma permanente.
+
+### Task 3.4 — Dictamen ejecutivo
+
+K=5 es insuficiente para uso operativo: el error supera los 7–10 carriles en ~12–18% de los escenarios. Se recomienda K ≥ 20 como mínimo, o mejorar la precisión del modelo de sensor si el hardware no lo permite.
+
+---
+
+## Ejecución
+
+En `Lab10.ipynb`, ejecutar las celdas en orden:
+
+1. **Task 2**: celdas de la versión buggy, corregida, tabla de errores y verificación de pesos.
+2. **Task 3.1**: definición del modelo y visualización demo (K=5, 20 pasos).
+3. **Task 3.2**: experimento con 50 simulaciones, gráficas y tabla comparativa.
+4. **Task 3.3**: función `alerta_colapso` y los 3 escenarios de colapso.
+5. **Task 3.4**: dictamen ejecutivo (celda markdown).
